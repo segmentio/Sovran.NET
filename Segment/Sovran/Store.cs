@@ -17,7 +17,7 @@ namespace Segment.Sovran
         }
 
         public int Subscribe<TState>(ISubscriber subscriber, Action<IState> handler, bool initialState = false) where TState : IState
-        {
+        { 
             var subscription = new Subscription(subscriber, handler, typeof(TState));
             Subscribers.Add(subscription);
             if (initialState)

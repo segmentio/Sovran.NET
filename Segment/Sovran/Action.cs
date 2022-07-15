@@ -1,10 +1,7 @@
-﻿using System;
-namespace Segment.Sovran
+﻿namespace Segment.Sovran
 {
-    public class Action
+    public interface IAction
     {
-        public Action()
-        {
-        }
+        IState Reduce(IState state);
     }
 }

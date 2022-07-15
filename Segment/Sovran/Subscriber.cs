@@ -1,10 +1,7 @@
-﻿using System;
-namespace Segment.Sovran
+﻿namespace Segment.Sovran
 {
-    public class Subscriber
+    public interface ISubscriber
     {
-        public Subscriber()
-        {
-        }
+
     }
 }
