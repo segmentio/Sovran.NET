@@ -4,4 +4,12 @@
     <TargetFramework>netstandard2.0</TargetFramework>
   </PropertyGroup>
 
+  <ItemGroup>
+    <None Remove="Segment\" />
+    <None Remove="Segment\Sovran\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Segment\" />
+    <Folder Include="Segment\Sovran\" />
+  </ItemGroup>
 </Project>
