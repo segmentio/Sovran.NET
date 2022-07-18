@@ -23,4 +23,7 @@
     <Folder Include="Segment\" />
     <Folder Include="Segment\Sovran\" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Coroutine.NET" Version="0.1.0" />
+  </ItemGroup>
 </Project>

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using Segment.Concurrent;
 
 namespace Segment.Sovran
 {
@@ -10,16 +11,32 @@ namespace Segment.Sovran
 
         internal List<Subscription> Subscribers { get; set; }
 
+        private Scope _scope;
+
+        private Dispatcher _syncQueue;
+
+        private Dispatcher _updateQueue;
+
         public Store()
         {
             States = new List<Container>();
             Subscribers = new List<Subscription>();
+
+            _scope = new Scope();
+            _syncQueue = new Dispatcher(new LimitedConcurrencyLevelTaskScheduler(1));
+            _updateQueue = new Dispatcher(new LimitedConcurrencyLevelTaskScheduler(1));
         }
 
         public int Subscribe<TState>(ISubscriber subscriber, Action<IState> handler, bool initialState = false) where TState : IState
         { 
             var subscription = new Subscription(subscriber, handler, typeof(TState));
-            Subscribers.Add(subscription);
+
+            _scope.Async(_syncQueue, _ =>
+            {
+                Subscribers.Add(subscription);
+                return;
+            });
+
             if (initialState)
             {
                 var state = CurrentState<TState>();
