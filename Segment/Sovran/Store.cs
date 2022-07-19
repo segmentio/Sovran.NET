@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Segment.Concurrent;
 
 namespace Segment.Sovran
@@ -11,11 +12,13 @@ namespace Segment.Sovran
 
         internal List<Subscription> Subscribers { get; set; }
 
-        private Scope _scope;
+        private readonly Scope _scope;
 
-        private Dispatcher _syncQueue;
+        private readonly Dispatcher _syncQueue;
 
-        private Dispatcher _updateQueue;
+        private readonly Dispatcher _updateQueue;
+
+        private readonly Dispatcher _defaultQueue;
 
         public Store()
         {
@@ -25,37 +28,44 @@ namespace Segment.Sovran
             _scope = new Scope();
             _syncQueue = new Dispatcher(new LimitedConcurrencyLevelTaskScheduler(1));
             _updateQueue = new Dispatcher(new LimitedConcurrencyLevelTaskScheduler(1));
+            _defaultQueue = new Dispatcher(new LimitedConcurrencyLevelTaskScheduler(Environment.ProcessorCount));
         }
 
-        public int Subscribe<TState>(ISubscriber subscriber, Action<IState> handler, bool initialState = false) where TState : IState
-        { 
-            var subscription = new Subscription(subscriber, handler, typeof(TState));
+        public async Task<int> Subscribe<TState>(ISubscriber subscriber, Action<IState> handler, bool initialState = false, Dispatcher queue = default) where TState : IState
+        {
+            if (queue == null)
+            {
+                queue = _defaultQueue;
+            }
+            var subscription = new Subscription(subscriber, handler, typeof(TState), queue);
 
-            _scope.Async(_syncQueue, _ =>
+            await _scope.Launch(_syncQueue, delegate 
             {
                 Subscribers.Add(subscription);
-                return;
             });
 
             if (initialState)
             {
-                var state = CurrentState<TState>();
+                var state = await CurrentState<TState>();
                 if (state != null)
                 {
-                    Notify(new List<Subscription> { subscription }, state);
+                    await Notify(new List<Subscription> { subscription }, state);
                 }
             }
             return subscription.SubscriptionID;
         }
 
-        public void Unsubscribe(int identifier)
+        public async Task Unsubscribe(int identifier)
         {
-            Subscribers.RemoveAll(item => item.SubscriptionID == identifier);
+            await _scope.Launch(_syncQueue, delegate
+            {
+                Subscribers.RemoveAll(item => item.SubscriptionID == identifier);
+            });
         }
 
-        public void Provide<TState>(TState state) where TState : IState
+        public async Task Provide<TState>(TState state) where TState : IState
         {
-            var exists = Existing(state);
+            var exists = await Existing(state);
             if (exists.Count != 0)
             {
                 // Ignore it since it is already there
@@ -63,20 +73,24 @@ namespace Segment.Sovran
             }
 
             var container = new Container(state);
-            States.Add(container);
+
+            await _scope.Launch(_updateQueue, delegate
+            {
+                States.Add(container);
+            });
 
             // Get any handlers that may have been added prior to state
             // being provided that work against TState.
-            var subscriptions = ExistingSubscribers<TState>();
-            Notify(subscriptions, state);
+            var subscriptions = await ExistingSubscribers<TState>();
+            await Notify(subscriptions, state);
         }
 
         /**
          * Dispatch
          */
-        public void Dispatch<TAction, TState>(TAction action) where TAction : IAction where TState : IState
+        public async Task Dispatch<TAction, TState>(TAction action) where TAction : IAction where TState : IState
         {
-            var existingStates = ExistingStatesOfTStateype<TState>();
+            var existingStates = await ExistingStatesOfTStateype<TState>();
             if (existingStates.Count == 0)
             {
                 return;
@@ -86,18 +100,22 @@ namespace Segment.Sovran
             if (targetContainer != null)
             {
                 var state = targetContainer.State;
-                state = action.Reduce(state);
-                targetContainer.State = state;
 
-                var subs = ExistingSubscribers<TState>();
-                Notify(subs, state);
+                await _scope.Launch(_updateQueue, delegate
+                {
+                    state = action.Reduce(state);
+                    targetContainer.State = state;
+                });
+
+                var subs = await ExistingSubscribers<TState>();
+                await Notify(subs, state);
             }
         }
 
 
-        public TState CurrentState<TState>() where TState : IState
+        public async Task<TState> CurrentState<TState>() where TState : IState
         {
-            var container = ExistingStatesOfTStateype<TState>().First();
+            var container = (await ExistingStatesOfTStateype<TState>()).First();
             if (container.State is TState state)
             {
                 return state;
@@ -109,41 +127,64 @@ namespace Segment.Sovran
         /**
          * State Lookup
          */
-        private List<Container> Existing<T>(T state) where T : IState
+        private async Task<List<Container>> Existing<T>(T state) where T : IState
         {
-            var result = States.FindAll(o => o.State.GetType() == state.GetType());
+            var result = await _scope.Async(_updateQueue, delegate
+            {
+                return States.FindAll(o => o.State.GetType() == state.GetType()); ;
+            });
+                
             return result;
         }
 
-        private List<Container> ExistingStatesOfTStateype<T>() where T : IState
+        private async Task<List<Container>> ExistingStatesOfTStateype<T>() where T : IState
         {
-            var result = States.FindAll(o => o.State.GetType() == typeof(T));
+            var result = await _scope.Async(_updateQueue, delegate
+            {
+                return States.FindAll(o => o.State.GetType() == typeof(T));
+            });
+
             return result;
         }
 
         /**
          * Subscriber lookup
          */
-        private List<Subscription> ExistingSubscribers<T>() where T : IState
+        private async Task<List<Subscription>> ExistingSubscribers<T>() where T : IState
         {
-            return Subscribers.FindAll(item => item.HandlerType == typeof(T));
+            var subscribers = await _scope.Async(_syncQueue, delegate
+            {
+                return Subscribers.FindAll(item => item.HandlerType == typeof(T));
+            });
+
+            return subscribers;
         }
 
-        private void Notify<T>(List<Subscription> subscribers, T state) where T : IState
+        private async Task Notify<T>(List<Subscription> subscribers, T state) where T : IState
         {
-            // TODO: Turn this into an asynchronous task   
             foreach (var subscription in subscribers)
             {
-                subscription.Handler?.Invoke(state);
+                var handler = subscription.Handler;
+                var ownerAlive = subscription.Owner.TryGetTarget(out var _);
+                if (handler == null || !ownerAlive) continue;
+
+
+                var _ =_scope.Launch(subscription.Queue, delegate
+                {
+                    handler(state);
+                });
             }
 
             // Clean up any expired subscribers.
-            Clean();
+            await Clean();
         }
 
-        public void Clean()
+        public async Task Clean()
         {
-            Subscribers.RemoveAll(sub => sub.Owner == null);
+            await _scope.Launch(_syncQueue, delegate
+            {
+                Subscribers.RemoveAll(sub => sub.Owner == null);
+            });
         }
     }
 
@@ -151,17 +192,20 @@ namespace Segment.Sovran
     // Internal classes
     internal class Subscription
     {
-        internal ISubscriber Owner { get; }
+        internal WeakReference<ISubscriber> Owner { get; }
         internal Action<IState> Handler { get; }
         internal Type HandlerType { get; }
         internal int SubscriptionID { get; }
+        internal Dispatcher Queue { get; }
 
-        internal Subscription(ISubscriber owner, Action<IState> handler, Type handlerType)
+        internal Subscription(ISubscriber owner, Action<IState> handler,
+            Type handlerType, Dispatcher queue)
         {
-            this.Owner = owner;
+            this.Owner = new WeakReference<ISubscriber>(owner);
             this.Handler = handler;
             this.HandlerType = handlerType;
             this.SubscriptionID = CreateNextSubscriptionID();
+            this.Queue = queue;
         }
 
         private static int _nextSubscriptionID = 1;
