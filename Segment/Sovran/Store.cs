@@ -39,7 +39,7 @@ namespace Segment.Sovran
             }
             var subscription = new Subscription(subscriber, handler, typeof(TState), queue);
 
-            await _scope.Launch(_syncQueue, delegate 
+            await _scope.Launch(_syncQueue, delegate
             {
                 Subscribers.Add(subscription);
             });
@@ -115,12 +115,13 @@ namespace Segment.Sovran
 
         public async Task<TState> CurrentState<TState>() where TState : IState
         {
-            var container = (await ExistingStatesOfTStateype<TState>()).First();
-            if (container.State is TState state)
+            var matchingStates = await ExistingStatesOfTStateype<TState>();
+
+            if (matchingStates.Count <= 0) return default;
+            if (matchingStates[0].State is TState state)
             {
                 return state;
             }
-
             return default;
         }
 
@@ -133,7 +134,7 @@ namespace Segment.Sovran
             {
                 return States.FindAll(o => o.State.GetType() == state.GetType()); ;
             });
-                
+
             return result;
         }
 
@@ -169,7 +170,7 @@ namespace Segment.Sovran
                 if (handler == null || !ownerAlive) continue;
 
 
-                var _ =_scope.Launch(subscription.Queue, delegate
+                var _ = _scope.Launch(subscription.Queue, delegate
                 {
                     handler(state);
                 });
