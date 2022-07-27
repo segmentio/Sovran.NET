@@ -14,26 +14,38 @@ namespace Segment.Sovran
 
         private readonly Scope _scope;
 
-        private readonly Dispatcher _syncQueue;
+        private readonly IDispatcher _syncQueue;
 
-        private readonly Dispatcher _updateQueue;
+        private readonly IDispatcher _updateQueue;
 
-        private readonly Dispatcher _defaultQueue;
+        private readonly IDispatcher _defaultQueue;
 
-        public Store()
+        private readonly bool _useSynchronizeDispatcher;
+
+        public Store(bool useSynchronizeDispatcher = false)
         {
             States = new List<Container>();
             Subscribers = new List<Subscription>();
 
             _scope = new Scope();
-            _syncQueue = new Dispatcher(new LimitedConcurrencyLevelTaskScheduler(1));
-            _updateQueue = new Dispatcher(new LimitedConcurrencyLevelTaskScheduler(1));
-            _defaultQueue = new Dispatcher(new LimitedConcurrencyLevelTaskScheduler(Environment.ProcessorCount));
+            _useSynchronizeDispatcher = useSynchronizeDispatcher;
+            if (useSynchronizeDispatcher)
+            {
+                _defaultQueue = new SynchronizeDispatcher();
+                _syncQueue = _defaultQueue;
+                _updateQueue = _defaultQueue;
+            }
+            else
+            {
+                _syncQueue = new Dispatcher(new LimitedConcurrencyLevelTaskScheduler(1));
+                _updateQueue = new Dispatcher(new LimitedConcurrencyLevelTaskScheduler(1));
+                _defaultQueue = new Dispatcher(new LimitedConcurrencyLevelTaskScheduler(Environment.ProcessorCount));
+            }
         }
 
-        public async Task<int> Subscribe<TState>(ISubscriber subscriber, Action<IState> handler, bool initialState = false, Dispatcher queue = default) where TState : IState
+        public async Task<int> Subscribe<TState>(ISubscriber subscriber, Action<IState> handler, bool initialState = false, IDispatcher queue = default) where TState : IState
         {
-            if (queue == null)
+            if (queue == null || _useSynchronizeDispatcher)
             {
                 queue = _defaultQueue;
             }
@@ -90,7 +102,7 @@ namespace Segment.Sovran
          */
         public async Task Dispatch<TAction, TState>(TAction action) where TAction : IAction where TState : IState
         {
-            var existingStates = await ExistingStatesOfTStateype<TState>();
+            var existingStates = await ExistingStatesOfType<TState>();
             if (existingStates.Count == 0)
             {
                 return;
@@ -115,7 +127,7 @@ namespace Segment.Sovran
 
         public async Task<TState> CurrentState<TState>() where TState : IState
         {
-            var matchingStates = await ExistingStatesOfTStateype<TState>();
+            var matchingStates = await ExistingStatesOfType<TState>();
 
             if (matchingStates.Count <= 0) return default;
             if (matchingStates[0].State is TState state)
@@ -138,7 +150,7 @@ namespace Segment.Sovran
             return result;
         }
 
-        private async Task<List<Container>> ExistingStatesOfTStateype<T>() where T : IState
+        private async Task<List<Container>> ExistingStatesOfType<T>() where T : IState
         {
             var result = await _scope.Async(_updateQueue, delegate
             {
@@ -197,10 +209,10 @@ namespace Segment.Sovran
         internal Action<IState> Handler { get; }
         internal Type HandlerType { get; }
         internal int SubscriptionID { get; }
-        internal Dispatcher Queue { get; }
+        internal IDispatcher Queue { get; }
 
         internal Subscription(ISubscriber owner, Action<IState> handler,
-            Type handlerType, Dispatcher queue)
+            Type handlerType, IDispatcher queue)
         {
             this.Owner = new WeakReference<ISubscriber>(owner);
             this.Handler = handler;

@@ -14,7 +14,7 @@ namespace Tests
         public async Task TestProvide()
         {
             await store.Provide(new MessageState());
-            Assert.Equal(1, store.States.Count);
+            Assert.Single(store.States);
 
             await store.Provide(new UserState());
             Assert.Equal(2, store.States.Count);
@@ -106,7 +106,7 @@ namespace Tests
             var subscriptionCount = store.Subscribers.Count;
             await store.Unsubscribe(identifier);
 
-            Assert.False(store.Subscribers.Any(o => o.SubscriptionID == identifier));
+            Assert.DoesNotContain(store.Subscribers, o => o.SubscriptionID == identifier);
             Assert.Equal(subscriptionCount - 1, store.Subscribers.Count);
 
             var nextAction = new MessagesUnreadAction
