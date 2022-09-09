@@ -24,7 +24,7 @@
     <Folder Include="Segment\Sovran\" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Coroutine.NET" Version="0.5.0" />
+    <PackageReference Include="Coroutine.NET" Version="1.0.0" />
   </ItemGroup>
   <ItemGroup>
       <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
