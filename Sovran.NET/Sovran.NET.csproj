@@ -9,7 +9,7 @@
     
     <Authors>Segment, Inc</Authors>
     <Description>Small, Efficient, Easy. State Management for Kotlin.</Description>
-    <Version>0.4.0</Version>
+    <Version>1.0.0</Version>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/segmentio/Sovran.NET</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
