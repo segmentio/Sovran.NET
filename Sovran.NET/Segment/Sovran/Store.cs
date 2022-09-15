@@ -22,12 +22,12 @@ namespace Segment.Sovran
 
         private readonly bool _useSynchronizeDispatcher;
 
-        public Store(bool useSynchronizeDispatcher = false)
+        public Store(bool useSynchronizeDispatcher = false, ICoroutineExceptionHandler exceptionHandler = default)
         {
             States = new List<Container>();
             Subscribers = new List<Subscription>();
 
-            _scope = new Scope();
+            _scope = new Scope(exceptionHandler);
             _useSynchronizeDispatcher = useSynchronizeDispatcher;
             if (useSynchronizeDispatcher)
             {

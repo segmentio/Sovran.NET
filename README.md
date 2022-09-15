@@ -1,12 +1,12 @@
 // add badges and stuff here
 
 # Sovran.NET
-Small, Efficient, Easy. State Management for Kotlin.
+Small, Efficient, Easy. State Management for .Net.
 
 Sovran's goal is to be minimal, efficient, easy to implement and to make debugging state changes effortless.
 
 While it is a rather opinionated library, we hope that you'll find said opinions to be with good reason.  While it
-is somewhat similar to things like Redux and Flux there are some natural differences when applied to Kotlin.
+is somewhat similar to things like Redux and Flux there are some natural differences when applied to .Net.
 
 ### We don't like large state structures
 
@@ -15,7 +15,7 @@ data contained within.  We have opted to allow multiple state structures to be s
 This has the benefit of subscribers to be given *just* the parts of the state that they are interested in.  It's highly
 recommended that state structures only contain properties that relate to one another in some obvious way.
 
-By using data classes to define state objects, we benefit from the natural copy mechanism within Kotlin to make sure
+By using data classes to define state objects, we benefit from the natural copy mechanism within .Net to make sure
 no direct access to state is given to subscribers.
 
 ### We don't like artificial constraints
@@ -31,7 +31,7 @@ You'll notice that when using Sovran, it's actually the subscription input that 
 closure is intended to work against.  This allows us to avoid having developers supply the type twice.
 
 Example:
-```kotlin
+```.Net
 store.subscribe(subscriber = this, stateClazz = MyState::class) { state ->
     // MyState was updated, react to it in some way.
     print(state)
