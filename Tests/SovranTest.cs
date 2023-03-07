@@ -8,7 +8,7 @@ namespace Tests
 
     public class SovranTest : ISubscriber
     {
-        private Store store = new Store();
+        private readonly Store store = new Store();
 
         [Fact]
         public async Task TestProvide()
@@ -27,11 +27,11 @@ namespace Tests
             await store.Provide(new MessageState());
             await store.Provide(new UserState());
 
-            var id1 = await store.Subscribe<MessageState>(this, _ => { });
+            int id1 = await store.Subscribe<MessageState>(this, _ => { });
 
             await store.Subscribe<UserState>(this, _ => { });
 
-            var id3 = await store.Subscribe<UserState>(this, _ => { });
+            int id3 = await store.Subscribe<UserState>(this, _ => { });
 
             Assert.Equal(3, store.Subscribers.Count);
             Assert.Equal(id1 + 2, id3);
@@ -62,7 +62,7 @@ namespace Tests
             };
             await store.Dispatch<MessagesUnreadAction, MessageState>(expected);
 
-            var actual = await store.CurrentState<MessageState>();
+            MessageState actual = await store.CurrentState<MessageState>();
 
             Assert.Equal(expected.value, actual.unreadCount);
         }
@@ -70,7 +70,7 @@ namespace Tests
         [Fact]
         public async Task TestUnprovidedStateDispatch()
         {
-            var called = false;
+            bool called = false;
             await store.Provide(new MessageState());
             await store.Subscribe<NotProvidedState>(this, _ =>
             {
@@ -88,9 +88,9 @@ namespace Tests
         [Fact]
         public async Task TestUnsubscribeForAction()
         {
-            var called = 0;
+            int called = 0;
             await store.Provide(new MessageState());
-            var identifier = await store.Subscribe<MessageState>(this, state =>
+            int identifier = await store.Subscribe<MessageState>(this, state =>
             {
                 called++;
                 var messageState = state as MessageState;
@@ -103,7 +103,7 @@ namespace Tests
             };
             await store.Dispatch<MessagesUnreadAction, MessageState>(action);
 
-            var subscriptionCount = store.Subscribers.Count;
+            int subscriptionCount = store.Subscribers.Count;
             await store.Unsubscribe(identifier);
 
             Assert.DoesNotContain(store.Subscribers, o => o.SubscriptionID == identifier);
@@ -140,7 +140,7 @@ namespace Tests
             };
 
             await store.Provide(expected);
-            var actual = await store.CurrentState<MessageState>();
+            MessageState actual = await store.CurrentState<MessageState>();
 
             Assert.Equal(expected.unreadCount, actual.unreadCount);
             Assert.Equal(expected.outgoingCount, actual.outgoingCount);
